@@ -54,6 +54,7 @@
 #include "tuner_fc0013.h"
 #include "tuner_fc2580.h"
 #include "tuner_r82xx.h"
+#include "tuner_max2120.h"
 
 typedef struct rtlsdr_tuner_iface {
 	/* tuner interface */
@@ -263,6 +264,23 @@ int r820t_set_gain_mode(void *dev, int manual) {
 	return r82xx_set_gain(&devt->r82xx_p, manual, 0);
 }
 
+int m2120_init(void *dev) {
+	int r;
+	/* AGC */
+	r = rtlsdr_demod_write_reg(dev, 0, 0x0E, 0x02, 1);
+	r = _m2120_init(dev);
+	return r;
+}
+
+int m2120_set_gain(void *dev, int gain) {
+	// manually set the AGC output and open loop?
+	return 0;
+}
+
+int m2120_set_gain_mode(void *dev, int manual) {
+	return 0;
+}
+
 /* definition order must match enum rtlsdr_tuner */
 static rtlsdr_tuner_iface_t tuners[] = {
 	{
@@ -298,6 +316,11 @@ static rtlsdr_tuner_iface_t tuners[] = {
 		r820t_set_freq, r820t_set_bw, r820t_set_gain, NULL,
 		r820t_set_gain_mode
 	},
+	{
+		m2120_init, m2120_exit,
+		m2120_set_freq, NULL, m2120_set_gain, m2120_set_if_gain,
+		m2120_set_gain_mode
+	},
 };
 
 typedef struct rtlsdr_dongle {
@@ -309,6 +332,7 @@ typedef struct rtlsdr_dongle {
 /*
  * Please add your device here and send a patch to osmocom-sdr@lists.osmocom.org
  */
+// todo, max2120
 static rtlsdr_dongle_t known_devices[] = {
 	{ 0x0bda, 0x2832, "Generic RTL2832U" },
 	{ 0x0bda, 0x2838, "Generic RTL2832U OEM" },
@@ -969,6 +993,8 @@ int rtlsdr_get_tuner_gains(rtlsdr_dev_t *dev, int *gains)
 				     166, 197, 207, 229, 254, 280, 297, 328,
 				     338, 364, 372, 386, 402, 421, 434, 439,
 				     445, 480, 496 };
+	// todo: max2120
+	const int m2120_gains[] = { 0 };
 	const int unknown_gains[] = { 0 /* no gain values */ };
 
 	const int *ptr = NULL;
@@ -993,6 +1019,9 @@ int rtlsdr_get_tuner_gains(rtlsdr_dev_t *dev, int *gains)
 	case RTLSDR_TUNER_R820T:
 	case RTLSDR_TUNER_R828D:
 		ptr = r82xx_gains; len = sizeof(r82xx_gains);
+		break;
+	case RTLSDR_TUNER_MAX2120:
+		ptr = m2120_gains; len = sizeof(m2120_gains);
 		break;
 	default:
 		ptr = unknown_gains; len = sizeof(unknown_gains);
@@ -1553,6 +1582,13 @@ int rtlsdr_open(rtlsdr_dev_t **out_dev, uint32_t index)
 		goto found;
 	}
 
+	reg = rtlsdr_i2c_read_reg(dev, M2120_I2C_ADDR, M2120_CHECK_ADDR);
+	if (reg == M2120_CHECK_VAL) {
+		fprintf(stderr, "Found Maxim 2120 tuner\n");
+		dev->tuner_type = RTLSDR_TUNER_MAX2120;
+		goto found;
+	}
+
 	/* initialise GPIOs */
 	rtlsdr_set_gpio_output(dev, 5);
 
@@ -1596,6 +1632,9 @@ found:
 
 		/* enable spectrum inversion */
 		rtlsdr_demod_write_reg(dev, 1, 0x15, 0x01, 1);
+		break;
+	case RTLSDR_TUNER_MAX2120:
+		/* enable weird stuff, maybe skip this section */
 		break;
 	case RTLSDR_TUNER_UNKNOWN:
 		fprintf(stderr, "No supported tuner found\n");

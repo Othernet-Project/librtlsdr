@@ -28,6 +28,7 @@ RTLSDR_APPEND_SRCS(
     tuner_fc0013.c
     tuner_fc2580.c
     tuner_r82xx.c
+    tuner_max2120.c
 )
 
 ########################################################################
